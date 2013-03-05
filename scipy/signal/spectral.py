@@ -12,7 +12,7 @@ import warnings
 
 from scipy.lib.six import string_types
 
-__all__ = ['periodogram', 'welch', 'lombscargle']
+__all__ = ['periodogram', 'welch', 'lombscargle', 'lombscargle_pr']
 
 
 def periodogram(x, fs=1.0, window=None, nfft=None, detrend='constant',
@@ -376,3 +376,126 @@ def welch(x, fs=1.0, window='hanning', nperseg=256, noverlap=None, nfft=None,
 
     return f, Pxx
 
+
+def lombscargle_pr(x,
+                   y,
+                   ofac=4,
+                   hifac=1,
+                   macc=4):
+    """
+    Estimates a Lomb-Scargle periodogram with the algorithm desrcibed by Press
+    and Rybicki [1]_
+
+    Parameters
+    ----------
+    x : array like
+        Measurement Times.
+    y : array like
+        Measurement Values.
+    ofac : float, optional
+        oversampling factor. Defaults to 4.
+    hifac : float, optional
+        hifac times the "average" Nyquist frequency is upper bound of
+        calculated frequencies. Defaults to 1.
+    macc : float, optional
+        number of interpolation points per 1/4 cycle of highest frequency
+
+    Returns
+    -------
+    wk1 : array like
+        frequencies for which the periodogram has been calculated
+    wk2 : array like
+        periodogram values at the frequencies wk1
+    nout : int
+        number of calculated frequencies (basically len(wk1))
+    jmax : int
+        index of maximum wk2 value
+    prob : float
+        estimate of the significance of maximum wk2[jmax]. A small value of
+        prob indicates that a significant periodic signal is present.
+
+
+    Notes
+    -----
+    This function is a translation of the original FORTRAN code in [1]_ .
+    .. versionadded:: 0.13.0
+
+    References
+    ----------
+    .. [1] W. H. Press, G. B. Rybicki "Fast algorithm for spectral analysis of
+           unevenly sampled data", The Astrophysical Journal, vol. 338,
+           pp. 277-280, 1989
+    """
+
+    def _spread(y, yy, n, x, m):
+        from scipy.misc import factorial
+        ix = x
+        if x == int(ix):
+            yy[ix] = yy[ix] + y
+        else:
+            ilo = min(max(int(x - 0.5 * m + 1.0), 1), n - m + 1)  # fortran int same as python int? floor?
+            ihi = ilo + m - 1   # TODO beware cast to int
+            nden = factorial(m - 1)
+            fac = x - ilo
+            for j in np.arange(ilo + 1, ihi):  # DO j=ilo+1,ihi TODO check index
+                fac = fac * (x - j)
+            yy[ihi] = yy[ihi] + y * fac / (nden * (x - ihi))
+            for j in np.arange(ihi - 1, ilo, -1):  # DO j=ihi-1, ilo, -1 TODO check index
+                nden = (nden / (j + 1 - ilo)) * (j - ihi)
+                yy[j] = yy[j] + y * fac / (nden * (x - j))
+
+    # XXX remember fortran arrays are 0 based
+    n = len(y)
+    nout = int(0.5 * ofac * hifac * n)
+    nfreqt = int(ofac * hifac * n * macc)
+    nfreq = int(64)
+    while nfreq < nfreqt:
+        nfreq = nfreq * 2
+    ndim = 2 * nfreq
+    ave = y.mean()
+    var = y.var()
+    xmin = x.min()
+    xmax = x.max()
+    xdif = xmax - xmin
+    # zero the workspace
+    wk1 = np.zeros(ndim)
+    wk2 = np.zeros(ndim)
+    fac = ndim / (xdif * ofac)
+    fndim = ndim
+    # extirpolate the data into the workspaces
+    ck = 1 + ((x - xmin) * fac % fndim)
+    ckk = 1. + ((2 * (ck - 1)) % fndim)
+    for j in np.arange(n):  # DO {13} j=1,n
+        _spread(y[j] - ave, wk1, ndim, ck[j], macc)
+        _spread(1.0, wk2, ndim, ckk[j], macc)
+    #CONTINUE
+
+    # this explains quite nice how Numerical Recipes' realft works:
+    # http://stackoverflow.com/a/11321200/2131903
+    wk1 = np.fft.rfft(wk1)[:nout]
+    wk2 = np.fft.rfft(wk2)[:nout]
+    df = 1.0 / (xdif * ofac)
+    pmax = 1.0
+    # compute the Lomb-Scargle value for each frequency
+    #for j in range(nout):  # DO {14} j=1, nout
+
+    hypo = np.sqrt(wk2.real ** 2 + wk2.imag ** 2)
+    hc2wt = 0.5 * wk2.real / hypo
+    hs2wt = 0.5 * wk2.imag / hypo
+    cwt = np.sqrt(0.5 + hc2wt)
+    swt = np.sign(np.sqrt(0.5 - hc2wt))
+    swt = np.sqrt(0.5 - hc2wt) * np.sign(hs2wt)
+    den = 0.5 * n + hc2wt * wk2.real + hs2wt * wk2.imag
+    cterm = (cwt * wk1.real + swt * wk1.imag) ** 2.0 / den
+    sterm = (cwt * wk1.imag - swt * wk1.real) ** 2.0 / (n - den)
+    wk1 = np.arange(1, nout + 1) * df  # TODO check index
+    wk2 = (cterm + sterm) / (2.0 * var)
+
+    pmax = wk2.max()
+    jmax = wk2.argmax()
+    expy = np.exp(-pmax)
+    effm = 2.0 * nout / ofac
+    prob = effm * expy
+    if prob > 0.01:
+        prob = 1.0 - (1.0 - expy) ** effm
+    return wk1, wk2, nout, jmax, prob
