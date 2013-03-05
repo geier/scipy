@@ -429,8 +429,8 @@ def lombscargle_pr(x,
 
     def _spread(y, yy, n, x, m):
         from scipy.misc import factorial
-        ix = x   # TODO haeh?
-        if x == float(ix):  # is the default double?
+        ix = x
+        if x == int(ix):
             yy[ix] = yy[ix] + y
         else:
             ilo = min(max(int(x - 0.5 * m + 1.0), 1), n - m + 1)  # fortran int same as python int? floor?
@@ -467,8 +467,8 @@ def lombscargle_pr(x,
     for j in np.arange(n):  # DO {13} j=1,n
         ck = 1 + ((x[j] - xmin) * fac % fndim)
         ckk = 1. + ((2 * (ck - 1)) % fndim)
-        wk1 = _spread(y[j] - ave, wk1, ndim, ck, macc)
-        wk2 = _spread(1.0, wk2, ndim, ckk, macc)
+        _spread(y[j] - ave, wk1, ndim, ck, macc)
+        _spread(1.0, wk2, ndim, ckk, macc)
     #CONTINUE
 
     wk1 = np.fft.rfft(wk1, nfreq, 1)  # TODO probably not yet the same as the NR implementation
