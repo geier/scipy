@@ -12,7 +12,7 @@ import warnings
 
 from scipy.lib.six import string_types
 
-__all__ = ['periodogram', 'welch', 'lombscargle']
+__all__ = ['periodogram', 'welch', 'lombscargle', 'lombscargle_pr']
 
 
 def periodogram(x, fs=1.0, window=None, nfft=None, detrend='constant',
@@ -471,10 +471,10 @@ def lombscargle_pr(x,
         _spread(1.0, wk2, ndim, ckk, macc)
     #CONTINUE
 
-    wk1 = np.fft.rfft(wk1, nfreq, 1)  # TODO probably not yet the same as the NR implementation
-    wk2 = np.fft.rfft(wk2, nfreq, 1)
+    wk1 = np.fft.rfft(wk1, nfreq, 1)  # TODO
+    wk2 = np.fft.rfft(wk2, nfreq, 1)  # this explains quite nice how realft works
     df = 1.0 / (xdif - ofac)
-    k = 3
+    k = 2
     pmax = 1.0
     # compute the Lomb-Scargle value for each frequency
     for j in range(nout):  # DO {14} j=1, nout
@@ -487,12 +487,11 @@ def lombscargle_pr(x,
         den = 0.5 * n + hc2wt * wk2[k] + hs2wt * wk2[k + 1]
         cterm = (cwt * wk1[k] + swt * wk1[k + 1]) ** (2.0 / den)
         sterm = (cwt * wk1[k + 1] - swt * wk1[k]) ** (2.0 / (n - den))
-        wk1[j] = j * df
+        wk1[j] = (j + 1) * df
         wk2[j] = (cterm + sterm) / (2.0 * var)
-        if wk2[k] > pmax:
-            pmax = wk2[j]
-            jmax = j
         k = k + 2
+    pmax = wk2.max()
+    jmax = wk2.argmax()
     expy = np.exp(-pmax)
     effm = 2.0 * nout / ofac
     prob = effm * expy
