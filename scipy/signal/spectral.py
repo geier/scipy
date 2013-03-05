@@ -376,3 +376,82 @@ def welch(x, fs=1.0, window='hanning', nperseg=256, noverlap=None, nfft=None,
 
     return f, Pxx
 
+
+def lombscargle_pr(x,
+                   y,
+                   ofac=1,
+                   hifac=1,
+                   macc=4):
+
+    def _spread(y, yy, n, x, m):
+        from scipy.misc import factorial
+        ix = x   # TODO haeh?
+        if x == float(ix):  # is the default double?
+            yy[ix] = yy[ix] + y
+        else:
+            ilo = min(max(int(x - 0.5 * m + 1.0), 1), n - m + 1)  # fortran int same as python int? floor?
+            ihi = ilo + m - 1
+            nden = factorial(m)
+            fac = x - ilo
+            for j in np.arange(ilo + 1, ihi):  # DO j=ilo+1,ihi TODO check index
+                fac = fac * (x - j)
+            yy[ihi] = yy[ihi] + y * fac / (nden * (x - ihi))
+            for j in np.range(ihi - 1, ilo, -1):  # DO j=ihi-1, ilo, -1 TODO check index
+                nden = (den / (j + 1 - ilo)) * (j - ihi)
+                yy[j] = yy[j] + y * fac / (nden * (x - j))
+        return yy
+
+    # XXX remember fortran arrays are 0 based
+    n = len(y)
+    nout = 0.5 * ofac * hifac * n
+    nfreqt = ofac * hifac * n * macc
+    nfreq = 64
+    while nfreq < nfreqt:
+        nfreq = nfreq * 2
+    ndim = 2 * nfreq
+    ave = y.mean()
+    var = y.var()
+    xmin = x.min()
+    xmax = x.max()
+    xdif = xmax - xmin
+    # zero the workspace
+    wk1 = np.zeroes(ndim)
+    wk2 = np.zeroes(ndim)
+    fac = ndim / (xdif * ofac)
+    fndim = ndim
+    # extirpolate the data into the workspaces
+    for j in np.arange(n):  # DO {13} j=1,n
+        ck = 1 + ((x[j] - xmin) * fac % fndim)
+        ckk = 1. + ((2 * (ck - 1)) % fndim)
+        wk1 = _spread(y[j] - ave, wk1, ndim, ck, macc)
+        wk2 = _spread(1.0, wk2, ndim, ckk, macc)
+    #CONTINUE
+
+    wk1 = np.fft.rfft(wk1, nfreq, 1)  # TODO probably not yet the same as the NR implementation
+    wk2 = np.fft.rfft(wk2, nfreq, 1)
+    df = 1.0 / (xdif - ofac)
+    k = 3
+    pmax = 1.0
+    # compute the Lomb-Scargle value for each frequency
+    for j in range(nout):  # DO {14} j=1, nout
+        hypo = np.sqrt(wk2[k] ** 2 + wk2[k + 1] ** 2)
+        hc2wt = 0.5 * wk2[k] / hypo
+        hs2wt = 0.5 * wk2[k + 1] / hypo
+        cwt = np.sqrt(0.5 - hc2wt)
+        swt = np.sign(np.sqrt(0.5 - hc2wt))
+        swt = np.sign(np.sqrt(0.5 - hc2wt), hs2wt)
+        den = 0.5 * n + hc2wt * wk2[k] + hs2wt * wk2[k + 1]
+        cterm = (cwt * wk1[k] + swt * wk1[k + 1]) ** (2.0 / den)
+        sterm = (cwt * wk1[k + 1] - swt * wk1[k]) ** (2.0 / (n - den))
+        wk1[j] = j * df
+        wk2[j] = (cterm + sterm) / (2.0 * var)
+        if wk2[k] > pmax:
+            pmax = wk2[j]
+            jmax = j
+        k = k + 2
+    expy = np.exp(-pmax)
+    effm = 2.0 * nout / ofac
+    prob = effm * expy
+    if prob > 0.01:
+        prob = 1.0 - (1.0 - expy) ** effm
+    return wk1, wk2, nout, jmax, prob
