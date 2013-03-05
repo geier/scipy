@@ -379,9 +379,53 @@ def welch(x, fs=1.0, window='hanning', nperseg=256, noverlap=None, nfft=None,
 
 def lombscargle_pr(x,
                    y,
-                   ofac=1,
+                   ofac=4,
                    hifac=1,
                    macc=4):
+    """
+    Estimates a Lomb-Scargle periodogram with the algorithm desrcibed by Press
+    and Rybicki [1]_
+
+    Parameters
+    ----------
+    x : array like
+        Measurement Times.
+    y : array like
+        Measurement Values.
+    ofac : float, optional
+        oversampling factor. Defaults to 4.
+    hifac : float, optional
+        hifac times the "average" Nyquist frequency is upper bound of
+        calculated frequencies. Defaults to 1.
+    macc : float, optional
+        number of interpolation points per 1/4 cycle of highest frequency
+
+    Returns
+    -------
+    wk1 : array like
+        frequencies for which the periodogram has been calculated
+    wk2 : array like
+        periodogram values at the frequencies wk1
+    nout : int
+        number of calculated frequencies (basically len(wk1))
+    jmax : int
+        index of maximum wk2 value
+    prob : float
+        estimate of the significance of maximum wk2[jmax]. A small value of
+        prob indicates that a significant periodic signal is present.
+
+
+    Notes
+    -----
+    This function is a translation of the original FORTRAN code in [1]_ .
+    .. versionadded:: 0.13.0
+
+    References
+    ----------
+    .. [1] W. H. Press, G. B. Rybicki "Fast algorithm for spectral analysis of
+           unevenly sampled data", The Astrophysical Journal, vol. 338,
+           pp. 277-280, 1989
+    """
 
     def _spread(y, yy, n, x, m):
         from scipy.misc import factorial
