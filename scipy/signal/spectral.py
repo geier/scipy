@@ -443,7 +443,6 @@ def lombscargle_pr(x,
             for j in np.range(ihi - 1, ilo, -1):  # DO j=ihi-1, ilo, -1 TODO check index
                 nden = (den / (j + 1 - ilo)) * (j - ihi)
                 yy[j] = yy[j] + y * fac / (nden * (x - j))
-        return yy
 
     # XXX remember fortran arrays are 0 based
     n = len(y)
@@ -472,7 +471,7 @@ def lombscargle_pr(x,
     #CONTINUE
 
     wk1 = np.fft.rfft(wk1, nfreq, 1)  # TODO
-    wk2 = np.fft.rfft(wk2, nfreq, 1)  # this explains quite nice how realft works
+    wk2 = np.fft.rfft(wk2, nfreq, 1)  # this explains quite nice how realft works http://stackoverflow.com/a/11321200/2131903
     df = 1.0 / (xdif - ofac)
     k = 2
     pmax = 1.0
