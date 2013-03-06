@@ -434,14 +434,14 @@ def lombscargle_pr(x,
             yy[ix] = yy[ix] + y
         else:
             ilo = min(max(int(x - 0.5 * m + 1.0), 1), n - m + 1)  # fortran int same as python int? floor?
-            ihi = ilo + m - 1
+            ihi = ilo + m - 1   # TODO beware cast to int
             nden = factorial(m)
             fac = x - ilo
             for j in np.arange(ilo + 1, ihi):  # DO j=ilo+1,ihi TODO check index
                 fac = fac * (x - j)
             yy[ihi] = yy[ihi] + y * fac / (nden * (x - ihi))
-            for j in np.range(ihi - 1, ilo, -1):  # DO j=ihi-1, ilo, -1 TODO check index
-                nden = (den / (j + 1 - ilo)) * (j - ihi)
+            for j in np.arange(ihi - 1, ilo, -1):  # DO j=ihi-1, ilo, -1 TODO check index
+                nden = (nden / (j + 1 - ilo)) * (j - ihi)
                 yy[j] = yy[j] + y * fac / (nden * (x - j))
 
     # XXX remember fortran arrays are 0 based
@@ -458,8 +458,8 @@ def lombscargle_pr(x,
     xmax = x.max()
     xdif = xmax - xmin
     # zero the workspace
-    wk1 = np.zeroes(ndim)
-    wk2 = np.zeroes(ndim)
+    wk1 = np.zeros(ndim)
+    wk2 = np.zeros(ndim)
     fac = ndim / (xdif * ofac)
     fndim = ndim
     # extirpolate the data into the workspaces
@@ -470,25 +470,25 @@ def lombscargle_pr(x,
         _spread(1.0, wk2, ndim, ckk, macc)
     #CONTINUE
 
-    wk1 = np.fft.rfft(wk1, nfreq, 1)  # TODO
-    wk2 = np.fft.rfft(wk2, nfreq, 1)  # this explains quite nice how realft works http://stackoverflow.com/a/11321200/2131903
-    df = 1.0 / (xdif - ofac)
-    k = 2
+    # this explains quite nice how Numerical Recipes' realft works:
+    # http://stackoverflow.com/a/11321200/2131903
+    wk1 = np.fft.rfft(wk1)
+    wk2 = np.fft.rfft(wk2)
+    df = 1.0 / (xdif * ofac)
     pmax = 1.0
     # compute the Lomb-Scargle value for each frequency
     for j in range(nout):  # DO {14} j=1, nout
-        hypo = np.sqrt(wk2[k] ** 2 + wk2[k + 1] ** 2)
-        hc2wt = 0.5 * wk2[k] / hypo
-        hs2wt = 0.5 * wk2[k + 1] / hypo
+        hypo = np.sqrt(wk2[j].real ** 2 + wk2[j].img ** 2)
+        hc2wt = 0.5 * wk2[j].real / hypo
+        hs2wt = 0.5 * wk2[j].img / hypo
         cwt = np.sqrt(0.5 - hc2wt)
         swt = np.sign(np.sqrt(0.5 - hc2wt))
         swt = np.sign(np.sqrt(0.5 - hc2wt), hs2wt)
-        den = 0.5 * n + hc2wt * wk2[k] + hs2wt * wk2[k + 1]
-        cterm = (cwt * wk1[k] + swt * wk1[k + 1]) ** (2.0 / den)
-        sterm = (cwt * wk1[k + 1] - swt * wk1[k]) ** (2.0 / (n - den))
-        wk1[j] = (j + 1) * df
+        den = 0.5 * n + hc2wt * wk2[j].real + hs2wt * wk2[j].img
+        cterm = (cwt * wk1[j].real + swt * wk1[j].img) ** (2.0 / den)
+        sterm = (cwt * wk1[j].img - swt * wk1[j].real) ** (2.0 / (n - den))
+        wk1[j] = (j + 1) * df  # TODO check index
         wk2[j] = (cterm + sterm) / (2.0 * var)
-        k = k + 2
     pmax = wk2.max()
     jmax = wk2.argmax()
     expy = np.exp(-pmax)
