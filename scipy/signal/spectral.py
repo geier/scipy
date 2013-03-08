@@ -463,11 +463,11 @@ def lombscargle_pr(x,
     fac = ndim / (xdif * ofac)
     fndim = ndim
     # extirpolate the data into the workspaces
+    ck = 1 + ((x - xmin) * fac % fndim)
+    ckk = 1. + ((2 * (ck - 1)) % fndim)
     for j in np.arange(n):  # DO {13} j=1,n
-        ck = 1 + ((x[j] - xmin) * fac % fndim)
-        ckk = 1. + ((2 * (ck - 1)) % fndim)
-        _spread(y[j] - ave, wk1, ndim, ck, macc)
-        _spread(1.0, wk2, ndim, ckk, macc)
+        _spread(y[j] - ave, wk1, ndim, ck[j], macc)
+        _spread(1.0, wk2, ndim, ckk[j], macc)
     #CONTINUE
 
     # this explains quite nice how Numerical Recipes' realft works:
@@ -477,18 +477,20 @@ def lombscargle_pr(x,
     df = 1.0 / (xdif * ofac)
     pmax = 1.0
     # compute the Lomb-Scargle value for each frequency
-    for j in range(nout):  # DO {14} j=1, nout
-        hypo = np.sqrt(wk2[j].real ** 2 + wk2[j].imag ** 2)
-        hc2wt = 0.5 * wk2[j].real / hypo
-        hs2wt = 0.5 * wk2[j].imag / hypo
-        cwt = np.sqrt(0.5 + hc2wt)
-        swt = np.sign(np.sqrt(0.5 - hc2wt))
-        swt = np.sqrt(0.5 - hc2wt) * np.sign(hs2wt)
-        den = 0.5 * n + hc2wt * wk2[j].real + hs2wt * wk2[j].imag
-        cterm = (cwt * wk1[j].real + swt * wk1[j].imag) ** 2.0 / den
-        sterm = (cwt * wk1[j].imag - swt * wk1[j].real) ** 2.0 / (n - den)
-        wk1[j] = (j + 1) * df  # TODO check index
-        wk2[j] = (cterm + sterm) / (2.0 * var)
+    #for j in range(nout):  # DO {14} j=1, nout
+
+    hypo = np.sqrt(wk2.real ** 2 + wk2.imag ** 2)
+    hc2wt = 0.5 * wk2.real / hypo
+    hs2wt = 0.5 * wk2.imag / hypo
+    cwt = np.sqrt(0.5 + hc2wt)
+    swt = np.sign(np.sqrt(0.5 - hc2wt))
+    swt = np.sqrt(0.5 - hc2wt) * np.sign(hs2wt)
+    den = 0.5 * n + hc2wt * wk2.real + hs2wt * wk2.imag
+    cterm = (cwt * wk1.real + swt * wk1.imag) ** 2.0 / den
+    sterm = (cwt * wk1.imag - swt * wk1.real) ** 2.0 / (n - den)
+    wk1 = np.arange(1, nout + 1) * df  # TODO check index
+    wk2 = (cterm + sterm) / (2.0 * var)
+
     pmax = wk2.max()
     jmax = wk2.argmax()
     expy = np.exp(-pmax)
@@ -497,4 +499,3 @@ def lombscargle_pr(x,
     if prob > 0.01:
         prob = 1.0 - (1.0 - expy) ** effm
     return wk1, wk2, nout, jmax, prob
-
