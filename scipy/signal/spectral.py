@@ -435,7 +435,7 @@ def lombscargle_pr(x,
         else:
             ilo = min(max(int(x - 0.5 * m + 1.0), 1), n - m + 1)  # fortran int same as python int? floor?
             ihi = ilo + m - 1   # TODO beware cast to int
-            nden = factorial(m)
+            nden = factorial(m - 1)
             fac = x - ilo
             for j in np.arange(ilo + 1, ihi):  # DO j=ilo+1,ihi TODO check index
                 fac = fac * (x - j)
@@ -446,9 +446,9 @@ def lombscargle_pr(x,
 
     # XXX remember fortran arrays are 0 based
     n = len(y)
-    nout = 0.5 * ofac * hifac * n
-    nfreqt = ofac * hifac * n * macc
-    nfreq = 64
+    nout = int(0.5 * ofac * hifac * n)
+    nfreqt = int(ofac * hifac * n * macc)
+    nfreq = int(64)
     while nfreq < nfreqt:
         nfreq = nfreq * 2
     ndim = 2 * nfreq
@@ -472,21 +472,21 @@ def lombscargle_pr(x,
 
     # this explains quite nice how Numerical Recipes' realft works:
     # http://stackoverflow.com/a/11321200/2131903
-    wk1 = np.fft.rfft(wk1)
-    wk2 = np.fft.rfft(wk2)
+    wk1 = np.fft.rfft(wk1)[:nout]
+    wk2 = np.fft.rfft(wk2)[:nout]
     df = 1.0 / (xdif * ofac)
     pmax = 1.0
     # compute the Lomb-Scargle value for each frequency
     for j in range(nout):  # DO {14} j=1, nout
-        hypo = np.sqrt(wk2[j].real ** 2 + wk2[j].img ** 2)
+        hypo = np.sqrt(wk2[j].real ** 2 + wk2[j].imag ** 2)
         hc2wt = 0.5 * wk2[j].real / hypo
-        hs2wt = 0.5 * wk2[j].img / hypo
-        cwt = np.sqrt(0.5 - hc2wt)
+        hs2wt = 0.5 * wk2[j].imag / hypo
+        cwt = np.sqrt(0.5 + hc2wt)
         swt = np.sign(np.sqrt(0.5 - hc2wt))
-        swt = np.sign(np.sqrt(0.5 - hc2wt), hs2wt)
-        den = 0.5 * n + hc2wt * wk2[j].real + hs2wt * wk2[j].img
-        cterm = (cwt * wk1[j].real + swt * wk1[j].img) ** (2.0 / den)
-        sterm = (cwt * wk1[j].img - swt * wk1[j].real) ** (2.0 / (n - den))
+        swt = np.sqrt(0.5 - hc2wt) * np.sign(hs2wt)
+        den = 0.5 * n + hc2wt * wk2[j].real + hs2wt * wk2[j].imag
+        cterm = (cwt * wk1[j].real + swt * wk1[j].imag) ** 2.0 / den
+        sterm = (cwt * wk1[j].imag - swt * wk1[j].real) ** 2.0 / (n - den)
         wk1[j] = (j + 1) * df  # TODO check index
         wk2[j] = (cterm + sterm) / (2.0 * var)
     pmax = wk2.max()
@@ -497,3 +497,4 @@ def lombscargle_pr(x,
     if prob > 0.01:
         prob = 1.0 - (1.0 - expy) ** effm
     return wk1, wk2, nout, jmax, prob
+
